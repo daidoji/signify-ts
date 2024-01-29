@@ -1,4 +1,4 @@
-name: CI
+name: Run Tests
 on:
   push:
     branches:
@@ -11,12 +11,12 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    name: Build, lint, and test on Node ${{ matrix.node }} and ${{ matrix.os }}
+    name: Build, lint, and test on Node 18.12.1 and ${{ matrix.os }}
 
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ macOS-latest]
+        os: [macOS-latest, ubuntu-latest]
 
     steps:
       - name: Checkout repo
@@ -27,15 +27,62 @@ jobs:
           node-version: '18.12.1'
           cache: 'npm'
 
-      - name: build
+      - name: Install dependencies
         run: |
           npm cache clean --force
           npm set registry https://registry.npmjs.org/
-          npm i
-          npm test -- --coverage=true
-          npm run build
+          npm ci
+      
+      - name: Check formatting
+        run: npm run pretty:check 
+      
+      - name: Lint
+        run: npm run lint
+      
+      - name: Test
+        run: npm test -- --coverage=true
+      
+      - name: Build
+        run: npm run build
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  test:
+    name: Run integration test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '18.12.1'
+          cache: 'npm'
+      - name: install deps
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Start dependencies
+        run: docker compose up deps --pull always
+      - name: Run integration test
+        run: npm run test:integration
+      - name: Print logs
+        run: docker compose logs
+        if: always()
+
+  audit:
+    name: Find vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '18.12.1'
+          cache: 'npm'
+      - name: Run audit
+        run: npm audit
